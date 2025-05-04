@@ -2,20 +2,11 @@ package chapter3
 
 import (
 	"testing"
-
-	epl "github.com/panyam/eplgo"
 )
 
-var ExprDict = epl.Dict[string, Expr]
-
-func NewTestLetLangEval() *LetLangEval {
+func NewTestLetLangEval() Evaluator {
 	out := NewLetLangEval()
-	out.SetOpFunc("-", func(env *epl.Env[any], args []Expr) any {
-		v1 := out.Eval(args[0], env).(*LitExpr)
-		v2 := out.Eval(args[1], env).(*LitExpr)
-		return Lit(v1.Value.(int) - v2.Value.(int))
-	})
-	return out
+	return setOpFuncs(out)
 }
 
 func TestNum(t *testing.T) {

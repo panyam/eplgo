@@ -7,13 +7,20 @@ import (
 	"gotest.tools/assert"
 )
 
+var ExprDict = epl.Dict[string, Expr]
+
+type Evaluator interface {
+	Eval(expr Expr, env *epl.Env[any]) any
+	SetOpFunc(string, OpFunc)
+}
+
 type TestCase struct {
 	Name     string
 	Expected any
 	Expr     Expr
 }
 
-func RunTest(t *testing.T, e Evaluater, tc *TestCase, extraenv map[string]Expr) {
+func RunTest(t *testing.T, e Evaluator, tc *TestCase, extraenv map[string]Expr) {
 	env := epl.NewEnv[any](nil)
 	for k, v := range extraenv {
 		env.Set(k, v)
@@ -28,48 +35,11 @@ func RunTest(t *testing.T, e Evaluater, tc *TestCase, extraenv map[string]Expr) 
 	// assert.Equal(tc.Expected, value)
 }
 
-/*
-proclang = {
-    "proc1": (""" let f = proc (x) -(x,11) in (f (f 77)) """, 55),
-    "proc2": ("""
-        let x = 200 in
-            let f = proc(z) -(z,x) in
-                let x = 100 in
-                    let g = proc(z) -(z,x) in
-                        -((f 1), (g 1))
-        """, -100),
-    "proc_multiargs": ("""
-        let f = proc(x,y) -(x,y) in
-            -((f 1 10), (f 10 5))
-    """, -14),
-    "proc_currying": (""" let f = proc(x,y) -(x,y) in ((f 5) 3) """, 2),
-    "proc_currying2": ("""
-        let f = proc(x,y)
-                if (isz y)
-                then x
-                else proc(a,b) (if isz b then +(a,x,y) else +(a,b,x,y))
-        in
-        (f 1 2 2 0)
-    """, 5),
+func setOpFuncs(e Evaluator) Evaluator {
+	e.SetOpFunc("-", func(env *epl.Env[any], args []Expr) any {
+		v1 := e.Eval(args[0], env).(*LitExpr)
+		v2 := e.Eval(args[1], env).(*LitExpr)
+		return Lit(v1.Value.(int) - v2.Value.(int))
+	})
+	return e
 }
-
-letreclang = {
-    "double": ("""
-        letrec double(x) = if isz(x) then 0 else - ((double -(x,1)), -2)
-        in (double 6)
-    """, 12),
-    "oddeven": ("""
-            letrec
-                even(x) = if isz(x) then 1 else (odd -(x,1))
-                odd(x) = if isz(x) then 0 else (even -(x,1))
-            in (odd 13)
-        """, 1),
-    "currying": ("""
-            letrec f(x,y) = if (isz y)
-                            then x
-                            else (f +(x,y))
-            in
-            (f 1 2 3 4 5 0)
-        """, 15)
-}
-*/

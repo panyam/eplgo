@@ -306,7 +306,8 @@ func NewLetLangEval() *LetLangEval {
 	return out
 }
 
-func (l *LetLangEval) Eval(expr Expr, env *epl.Env[any]) any {
+func (l *LetLangEval) LocalEval(expr Expr, env *epl.Env[any]) any {
+	// log.Println("LetLangEval for: ", reflect.TypeOf(expr), expr.Repr())
 	switch n := expr.(type) {
 	case *LitExpr:
 		return l.ValueOfLit(n, env)
@@ -323,7 +324,7 @@ func (l *LetLangEval) Eval(expr Expr, env *epl.Env[any]) any {
 	case *TupleExpr:
 		return l.ValueOfTupleExpr(n, env)
 	default:
-		log.Printf("Invalid type: %v", n)
+		// log.Printf("Invalid type: %v - %v", n, reflect.TypeOf(n))
 	}
 	panic("Invalid type")
 }
@@ -362,9 +363,7 @@ func (l *LetLangEval) ValueOfIfExpr(e *IfExpr, env *epl.Env[any]) any {
 
 func (l *LetLangEval) ValueOfTupleExpr(e *TupleExpr, env *epl.Env[any]) any {
 	// TODO - Error and type checking
-	vals := gfn.Map(e.Children, func(e Expr) any {
-		return l.Eval(e, env)
-	})
+	vals := l.EvalExprList(e.Children, env)
 	return vals // Tuple(vals)
 }
 
@@ -380,6 +379,10 @@ func (l *LetLangEval) ValueOfLetExpr(e *LetExpr, env *epl.Env[any]) any {
 	// TODO - Error and type checking
 	bindings := map[string]any{}
 	for k, v := range e.Mappings {
+		// log.Println("Calling binding: ", reflect.TypeOf(v), v.Repr())
+		// log.Println("This() Type for binding: ", reflect.TypeOf(l.This()))
+		// log.Println("Self Type for binding: ", reflect.TypeOf(l.Self))
+
 		bindings[k] = l.Eval(v, env)
 	}
 	newenv := env.Extend(bindings)
