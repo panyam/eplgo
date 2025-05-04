@@ -3,7 +3,7 @@ package chapter3
 import "testing"
 
 func NewTestProcLangEval() Evaluator {
-	return setOpFuncs(NewProcLangEval())
+	return SetOpFuncs(NewProcLangEval())
 }
 
 func TestProc1(t *testing.T) {

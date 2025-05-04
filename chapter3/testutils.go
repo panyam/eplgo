@@ -66,7 +66,7 @@ func RunTest(t *testing.T, e Evaluator, tc *TestCase, extraenv map[string]Expr) 
 	// log.Printf("Test %s Passed. Found: %v (%T)\n", tc.Name, value, value)
 }
 
-func setOpFuncs(e Evaluator) Evaluator {
+func SetOpFuncs(e Evaluator) Evaluator {
 	e.SetOpFunc("-", func(env *epl.Env[any], args []Expr) any {
 		if len(args) != 2 {
 			panic("'-' operator expects exactly 2 arguments")

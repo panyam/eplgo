@@ -6,7 +6,7 @@ import "testing"
 
 // NewTestLetRecLangEval creates an evaluator and sets up standard operators.
 func NewTestLetRecLangEval() Evaluator {
-	return setOpFuncs(NewLetRecLangEval())
+	return SetOpFuncs(NewLetRecLangEval())
 }
 
 /*

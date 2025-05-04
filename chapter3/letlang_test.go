@@ -6,7 +6,7 @@ import (
 
 func NewTestLetLangEval() Evaluator {
 	out := NewLetLangEval()
-	return setOpFuncs(out)
+	return SetOpFuncs(out)
 }
 
 func TestNum(t *testing.T) {
