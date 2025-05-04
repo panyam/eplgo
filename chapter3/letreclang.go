@@ -129,6 +129,7 @@ func (l *LetRecLangEval) ValueOfLetRec(e *LetRecExpr, env *epl.Env[any]) any {
 	}
 
 	// 3. Populate the new environment with these bound procedures.
+	// TODO can steps 2 and 3 be merged in a single loop?
 	for name, boundProc := range boundProcs {
 		newenv.Set(name, boundProc)
 	}
