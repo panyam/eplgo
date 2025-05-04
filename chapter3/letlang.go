@@ -2,6 +2,7 @@ package chapter3
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 	"strings"
 
@@ -80,7 +81,7 @@ func (l *LitExpr) Repr() string {
 }
 
 func (l *LitExpr) Printable() *epl.Printable {
-	return epl.Printablef(0, l.Repr())
+	return &epl.Printable{0, l.Repr(), nil}
 }
 
 type VarExpr struct {
@@ -292,3 +293,103 @@ func (v *LetExpr) Repr() string {
 	out += v.Body.Repr()
 	return out
 }
+
+// Evaluator for the LetLang
+
+type LetLangEval struct {
+	BaseEval
+}
+
+func NewLetLangEval() *LetLangEval {
+	out := &LetLangEval{}
+	out.BaseEval.Self = out
+	return out
+}
+
+func (l *LetLangEval) Eval(expr Expr, env *epl.Env[any]) any {
+	switch n := expr.(type) {
+	case *LitExpr:
+		return l.ValueOfLit(n, env)
+	case *VarExpr:
+		return l.ValueOfVar(n, env)
+	case *OpExpr:
+		return l.ValueOfOpExpr(n, env)
+	case *IsZeroExpr:
+		return l.ValueOfIsZeroExpr(n, env)
+	case *IfExpr:
+		return l.ValueOfIfExpr(n, env)
+	case *LetExpr:
+		return l.ValueOfLetExpr(n, env)
+	case *TupleExpr:
+		return l.ValueOfTupleExpr(n, env)
+	default:
+		log.Printf("Invalid type: %v", n)
+	}
+	panic("Invalid type")
+}
+
+// Evalute the value of a literal
+func (l *LetLangEval) ValueOfLit(lit *LitExpr, env *epl.Env[any]) any {
+	return lit
+}
+
+// Evaluate the value of a variable
+func (l *LetLangEval) ValueOfVar(e *VarExpr, env *epl.Env[any]) any {
+	// TODO - Error and type checking
+	val, _ := env.Get(e.Name)
+	return val
+}
+
+func (l *LetLangEval) ValueOfOpExpr(e *OpExpr, env *epl.Env[any]) any {
+	// TODO - Error and type checking
+	opfunc := l.GetOpFunc(e.Op)
+	if opfunc == nil {
+		log.Fatalf("opfunc not found: %s", e.Op)
+		panic("opfunc not found")
+	}
+	return opfunc(env, e.Args)
+}
+
+func (l *LetLangEval) ValueOfIfExpr(e *IfExpr, env *epl.Env[any]) any {
+	// TODO - Error and type checking
+	cond := l.Eval(e.Cond, env)
+	if cond == true {
+		return l.Eval(e.Then, env)
+	} else {
+		return l.Eval(e.Else, env)
+	}
+}
+
+func (l *LetLangEval) ValueOfTupleExpr(e *TupleExpr, env *epl.Env[any]) any {
+	// TODO - Error and type checking
+	vals := gfn.Map(e.Children, func(e Expr) any {
+		return l.Eval(e, env)
+	})
+	return vals // Tuple(vals)
+}
+
+func (l *LetLangEval) ValueOfIsZeroExpr(e *IsZeroExpr, env *epl.Env[any]) any {
+	// TODO - Error and type checking
+	val := l.Eval(e.Expr, env).(*LitExpr)
+	return Lit(val.Value == 0)
+}
+
+type ExprMap = map[string]Expr
+
+func (l *LetLangEval) ValueOfLetExpr(e *LetExpr, env *epl.Env[any]) any {
+	// TODO - Error and type checking
+	bindings := map[string]any{}
+	for k, v := range e.Mappings {
+		bindings[k] = l.Eval(v, env)
+	}
+	newenv := env.Extend(bindings)
+	return l.Eval(e.Body, newenv)
+}
+
+/*
+   @case("let")
+   def valueOfLet(self, let, env):
+       expvals = {var: self.valueOf(exp, env) for var,exp in let.mappings.items()}
+       newenv = env.extend(**expvals)
+       return self.valueOf(let.body, newenv)
+*/

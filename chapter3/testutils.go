@@ -1,9 +1,10 @@
 package chapter3
 
 import (
-	"log"
+	"testing"
 
 	epl "github.com/panyam/eplgo"
+	"gotest.tools/assert"
 )
 
 type TestCase struct {
@@ -12,15 +13,18 @@ type TestCase struct {
 	Expr     Expr
 }
 
-func RunTest(tc *TestCase, extraenv map[string]Expr) {
+func RunTest(t *testing.T, e Evaluater, tc *TestCase, extraenv map[string]Expr) {
 	env := epl.NewEnv[any](nil)
 	for k, v := range extraenv {
 		env.Set(k, v)
 	}
-	value := LetLangEval(tc.Expr, env)
-	log.Println("======= TestCase: ", tc.Name, "=======")
-	log.Println("Found: ", value)
+	value := e.Eval(tc.Expr, env)
+	found := value.(*LitExpr)
+	assert.Equal(t, found.Value, tc.Expected)
+	/*log.Println("======= TestCase: ", tc.Name, "=======")
+	log.Println("Found: ", found.Value)
 	log.Println("Expected: ", tc.Expected)
+	*/
 	// assert.Equal(tc.Expected, value)
 }
 

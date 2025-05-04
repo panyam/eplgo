@@ -6,30 +6,38 @@ import (
 	epl "github.com/panyam/eplgo"
 )
 
-type ExprMap = map[string]Expr
-
 var ExprDict = epl.Dict[string, Expr]
+
+func NewTestLetLangEval() *LetLangEval {
+	out := NewLetLangEval()
+	out.SetOpFunc("-", func(env *epl.Env[any], args []Expr) any {
+		v1 := out.Eval(args[0], env).(*LitExpr)
+		v2 := out.Eval(args[1], env).(*LitExpr)
+		return Lit(v1.Value.(int) - v2.Value.(int))
+	})
+	return out
+}
 
 func TestNum(t *testing.T) {
 	tc := TestCase{"num", 3, Lit(3)}
-	RunTest(&tc, nil)
+	RunTest(t, NewTestLetLangEval(), &tc, nil)
 }
 
 func TestVar(t *testing.T) {
 	tc := TestCase{"var", 5, Var("x")}
-	RunTest(&tc, map[string]Expr{
+	RunTest(t, NewTestLetLangEval(), &tc, map[string]Expr{
 		"x": Lit(5),
 	})
 }
 
 func TestZeroTrue(t *testing.T) {
 	tc := TestCase{"isz_true", true, IsZero(Lit(0))}
-	RunTest(&tc, nil)
+	RunTest(t, NewTestLetLangEval(), &tc, nil)
 }
 
 func TestZeroFalse(t *testing.T) {
 	tc := TestCase{"isz_false", false, IsZero(Lit(1))}
-	RunTest(&tc, nil)
+	RunTest(t, NewTestLetLangEval(), &tc, nil)
 }
 
 func TestDiff(t *testing.T) {
@@ -43,7 +51,7 @@ func TestDiff(t *testing.T) {
 				Var("v"),
 				Var("i"),
 			))}
-	RunTest(&tc, map[string]Expr{
+	RunTest(t, NewTestLetLangEval(), &tc, map[string]Expr{
 		"i": Lit(1),
 		"v": Lit(5),
 		"x": Lit(10),
@@ -56,7 +64,7 @@ func TestIf(t *testing.T) {
 			IsZero(Op("-", Var("x"), Lit(11))),
 			Op("-", Var("y"), Lit(2)),
 			Op("-", Var("y"), Lit(4)))}
-	RunTest(&tc, map[string]Expr{
+	RunTest(t, NewTestLetLangEval(), &tc, map[string]Expr{
 		"x": Lit(33),
 		"y": Lit(22),
 	})
@@ -68,7 +76,7 @@ func TestLet(t *testing.T) {
 			Op("-", Var("x"), Lit(3)),
 		),
 	}
-	RunTest(&tc, nil)
+	RunTest(t, NewTestLetLangEval(), &tc, nil)
 }
 
 func TestLetNested(t *testing.T) {
@@ -83,7 +91,7 @@ func TestLetNested(t *testing.T) {
 				),
 			),
 		)}
-	RunTest(&tc, nil)
+	RunTest(t, NewTestLetLangEval(), &tc, nil)
 }
 
 func TestLet3(t *testing.T) {
@@ -103,7 +111,7 @@ func TestLet3(t *testing.T) {
 				),
 			),
 		)}
-	RunTest(&tc, nil)
+	RunTest(t, NewTestLetLangEval(), &tc, nil)
 }
 
 func TestLetMultiArgs(t *testing.T) {
@@ -121,5 +129,5 @@ func TestLetMultiArgs(t *testing.T) {
 					Op("-", Var("x"), Var("y")))),
 				Op("-", Op("-", Var("x"), Lit(8)), Var("y")))),
 	}
-	RunTest(&tc, nil)
+	RunTest(t, NewTestLetLangEval(), &tc, nil)
 }

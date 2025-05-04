@@ -44,10 +44,23 @@ func (e *Env[T]) Set(key string, value T) {
 	e.store[key] = &Ref[T]{Value: value}
 }
 
+// Set multiple key/values at once.
 func (e *Env[T]) SetMany(kvpairs map[string]T) {
 	for k, v := range kvpairs {
 		e.Set(k, v)
 	}
+}
+
+// Set multiple key/values at once.
+func (e *Env[T]) Push() *Env[T] {
+	return NewEnv(e)
+}
+
+// Extends our environment by creating a new environment and setting values in it
+func (e *Env[T]) Extend(kvpairs map[string]T) *Env[T] {
+	out := e.Push()
+	out.SetMany(kvpairs)
+	return out
 }
 
 // String representation for debugging
