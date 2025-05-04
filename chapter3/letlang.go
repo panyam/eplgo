@@ -4,60 +4,10 @@ import (
 	"fmt"
 	"log"
 	"reflect"
-	"strings"
 
 	epl "github.com/panyam/eplgo"
 	gfn "github.com/panyam/goutils/fn"
 )
-
-type Expr interface {
-	// Eq(another Expr) bool
-	Printable() *epl.Printable
-	Repr() string
-}
-
-func ExprEq(e1 Expr, e2 Expr) bool {
-	if e1 == e2 {
-		return true
-	}
-	if e1 == nil || e2 == nil {
-		return false
-	}
-	t1 := reflect.TypeOf(e1)
-	t2 := reflect.TypeOf(e2)
-	if t1 != t2 {
-		return false
-	}
-
-	// TODO - Call specific eq ops
-	return true
-}
-
-func ExprListPrintable(level int, e []Expr, yield func(*epl.Printable) bool) bool {
-	for _, child := range e {
-		if !yield(child.Printable()) {
-			return false
-		}
-	}
-	return true
-}
-
-func ExprListRepr(e []Expr) string {
-	return strings.Join(gfn.Map(e, func(e Expr) string { return e.Repr() }), ", ")
-}
-
-func ExprListEq(e1 []Expr, e2 []Expr) bool {
-	if len(e1) != len(e2) {
-		return false
-	}
-
-	for i, child := range e1 {
-		if !ExprEq(child, e2[i]) {
-			return false
-		}
-	}
-	return true
-}
 
 type LitExpr struct {
 	// can only be string, int, float or bool or one of the other lit types
@@ -135,8 +85,8 @@ type OpExpr struct {
 	Args []Expr
 }
 
-func Op(op string, args ...Expr) *OpExpr {
-	return &OpExpr{Op: op, Args: args}
+func Op(op string, args ...any) *OpExpr {
+	return &OpExpr{Op: op, Args: gfn.Map(args, AnyToExpr)}
 }
 
 func (v *OpExpr) Printable() *epl.Printable {
@@ -163,8 +113,8 @@ type IfExpr struct {
 	Else Expr
 }
 
-func If(cond Expr, then Expr, els Expr) *IfExpr {
-	return &IfExpr{cond, then, els}
+func If(cond any, then any, els any) *IfExpr {
+	return &IfExpr{AnyToExpr(cond), AnyToExpr(then), AnyToExpr(els)}
 }
 
 func (v *IfExpr) Printable() *epl.Printable {
@@ -205,8 +155,8 @@ type IsZeroExpr struct {
 	Expr Expr
 }
 
-func IsZero(e Expr) *IsZeroExpr {
-	return &IsZeroExpr{e}
+func IsZero(e any) *IsZeroExpr {
+	return &IsZeroExpr{AnyToExpr(e)}
 }
 
 func (v *IsZeroExpr) Printable() *epl.Printable {
@@ -337,7 +287,10 @@ func (l *LetLangEval) ValueOfLit(lit *LitExpr, env *epl.Env[any]) any {
 // Evaluate the value of a variable
 func (l *LetLangEval) ValueOfVar(e *VarExpr, env *epl.Env[any]) any {
 	// TODO - Error and type checking
-	val, _ := env.Get(e.Name)
+	val, found := env.Get(e.Name)
+	if !found {
+		panic(fmt.Sprintf("Variable '%s' not found in environment", e.Name))
+	}
 	return val
 }
 
@@ -352,9 +305,20 @@ func (l *LetLangEval) ValueOfOpExpr(e *OpExpr, env *epl.Env[any]) any {
 }
 
 func (l *LetLangEval) ValueOfIfExpr(e *IfExpr, env *epl.Env[any]) any {
-	// TODO - Error and type checking
-	cond := l.Eval(e.Cond, env)
-	if cond == true {
+	condVal := l.Eval(e.Cond, env) // Returns any
+	condBool := false
+
+	// Define truthiness: only Lit(true) is true, others (incl. Lit(false)) are false
+	if litCond, ok := condVal.(*LitExpr); ok {
+		if boolVal, ok2 := litCond.Value.(bool); ok2 {
+			condBool = boolVal // Use the actual boolean value
+		}
+		// Any other literal value (int, string, false) counts as false
+	} // Any non-literal result (like a BoundProc) also counts as false
+
+	// log.Printf("If condition %s evaluated to %v (%T), bool result: %v\n", e.Cond.Repr(), condVal, condVal, condBool)
+
+	if condBool {
 		return l.Eval(e.Then, env)
 	} else {
 		return l.Eval(e.Else, env)
@@ -368,31 +332,29 @@ func (l *LetLangEval) ValueOfTupleExpr(e *TupleExpr, env *epl.Env[any]) any {
 }
 
 func (l *LetLangEval) ValueOfIsZeroExpr(e *IsZeroExpr, env *epl.Env[any]) any {
-	// TODO - Error and type checking
-	val := l.Eval(e.Expr, env).(*LitExpr)
-	return Lit(val.Value == 0)
+	val := l.Eval(e.Expr, env) // Returns any
+	litVal, ok := val.(*LitExpr)
+	if !ok {
+		panic(fmt.Sprintf("iszero expected a LitExpr argument, got %T (%v) for expr %s", val, val, e.Expr.Repr()))
+	}
+	// For now, assume IsZero only works on ints
+	intVal, ok := litVal.Value.(int)
+	if !ok {
+		panic(fmt.Sprintf("iszero expected an integer value, got %T (%v)", litVal.Value, litVal.Value))
+	}
+	return Lit(intVal == 0) // Return *LitExpr(bool)
 }
 
 type ExprMap = map[string]Expr
 
 func (l *LetLangEval) ValueOfLetExpr(e *LetExpr, env *epl.Env[any]) any {
-	// TODO - Error and type checking
 	bindings := map[string]any{}
 	for k, v := range e.Mappings {
-		// log.Println("Calling binding: ", reflect.TypeOf(v), v.Repr())
-		// log.Println("This() Type for binding: ", reflect.TypeOf(l.This()))
-		// log.Println("Self Type for binding: ", reflect.TypeOf(l.Self))
-
-		bindings[k] = l.Eval(v, env)
+		// log.Printf("Evaluating let binding: %s = %s\n", k, v.Repr())
+		bindings[k] = l.Eval(v, env) // Eval returns any
+		// log.Printf("Binding %s evaluated to: %v (%T)\n", k, bindings[k], bindings[k])
 	}
 	newenv := env.Extend(bindings)
-	return l.Eval(e.Body, newenv)
+	// log.Printf("Evaluating let body %s in new env: %s\n", e.Body.Repr(), newenv)
+	return l.Eval(e.Body, newenv) // Eval returns any
 }
-
-/*
-   @case("let")
-   def valueOfLet(self, let, env):
-       expvals = {var: self.valueOf(exp, env) for var,exp in let.mappings.items()}
-       newenv = env.extend(**expvals)
-       return self.valueOf(let.body, newenv)
-*/

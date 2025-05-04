@@ -36,8 +36,10 @@ func StringSetEq(s1 []string, s2 []string) bool {
 
 func DictZip[K comparable, V any](keys []K, vals []V) map[K]V {
 	out := map[K]V{}
-	for i, k := range keys {
-		out[k] = vals[i]
+	l1 := len(keys)
+	l2 := len(vals)
+	for i := range min(l1, l2) {
+		out[keys[i]] = vals[i]
 	}
 	return out
 }

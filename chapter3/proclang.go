@@ -2,9 +2,12 @@ package chapter3
 
 import (
 	"fmt"
+	"log"
+	"reflect"
 	"strings"
 
 	epl "github.com/panyam/eplgo"
+	gfn "github.com/panyam/goutils/fn"
 )
 
 // Constructs for Procedures
@@ -64,8 +67,8 @@ type CallExpr struct {
 	Args     []Expr
 }
 
-func Call(operator Expr, args ...Expr) *CallExpr {
-	return &CallExpr{Operator: operator, Args: args}
+func Call(operator any, args ...any) *CallExpr {
+	return &CallExpr{Operator: AnyToExpr(operator), Args: gfn.Map(args, AnyToExpr)}
 }
 
 func (v *CallExpr) Printable() *epl.Printable {
@@ -130,37 +133,135 @@ func (l *ProcLangEval) ValueOfCall(e *CallExpr, env *epl.Env[any]) any {
 }
 
 func (l *ProcLangEval) applyProc(boundproc *BoundProc, args []any) any {
-	procexpr, savedEnv := boundproc.ProcExpr, boundproc.Env
-	currProcexpr := procexpr
-	currEnv := savedEnv
+	currProcexpr, currEnv := boundproc.ProcExpr, boundproc.Env
+	currArgs := args
+	var result any
+	initialCall := true
+
+	for { // Loop until explicitly returned or error
+		numParams := len(currProcexpr.Varnames)
+		numArgVals := len(currArgs)
+
+		// log.Printf("applyProc Loop Start: Proc(%v), Args: %v, Env: %s\n", currProcexpr.Varnames, currArgs, currEnv)
+
+		if numParams == 0 {
+			// If proc takes 0 params, evaluate its body.
+			// It *must not* be called with arguments.
+			if numArgVals > 0 {
+				panic(fmt.Sprintf("Procedure %s takes 0 arguments, but called with %d arguments: %v", currProcexpr.Repr(), numArgVals, currArgs))
+			}
+			// log.Println("Proc takes 0 params, evaluating body")
+			result = l.Eval(currProcexpr.Body, currEnv)
+			// If the body returned *another* 0-arg proc, we need to evaluate that too.
+			// This handles chains like `proc() proc() 5`
+			if bp, ok := result.(*BoundProc); ok && len(bp.ProcExpr.Varnames) == 0 {
+				// log.Println("Body returned another 0-arg proc, continuing")
+				currProcexpr = bp.ProcExpr
+				currEnv = bp.Env
+				// currArgs remains []
+				initialCall = false
+				continue // Re-evaluate the new 0-arg proc
+			} else {
+				// log.Println("Returning result from 0-arg proc body")
+				return result // Final value or a proc requiring args
+			}
+		}
+
+		// If we have a proc expecting params, but no args left, it means we have a partial application.
+		if numArgVals == 0 {
+			if initialCall {
+				// This should not happen if Call() is constructed correctly.
+				panic(fmt.Sprintf("Initial call to Proc(%v) with no arguments.", currProcexpr.Varnames))
+			} else {
+				// We consumed args in previous iterations, now none left. Return the current proc bound to its env.
+				// log.Printf("No more args, returning partially applied Proc(%v)\n", currProcexpr.Varnames)
+				return currProcexpr.Bind(currEnv) // Return the *current* bound proc
+			}
+		}
+
+		// --- Consume arguments ---
+		initialCall = false // An application is happening
+		maxArgs := min(numArgVals, numParams)
+		consumedArgs, restArgs := currArgs[:maxArgs], currArgs[maxArgs:]
+		// Only map params that are being consumed in this step
+		newArgsMap := epl.DictZip(currProcexpr.Varnames[:maxArgs], consumedArgs)
+		newenv := currEnv.Extend(newArgsMap)
+		// log.Printf("Consumed %d args (%v), %d remaining (%v). New Env: %s\n", maxArgs, consumedArgs, len(restArgs), restArgs, newenv)
+
+		if numParams > numArgVals { // Curry: Not enough args provided in this call
+			// The procedure expects more arguments than were supplied *in this chunk*.
+			leftVarnames := currProcexpr.Varnames[numArgVals:] // Params not covered by current args
+			newprocexpr := Proc(leftVarnames, currProcexpr.Body)
+			// log.Printf("Currying: Returning Proc(%v) bound to env %s\n", leftVarnames, newenv)
+			// The environment *must* include the args just consumed.
+			return newprocexpr.Bind(newenv) // Return the new curried proc
+
+		} else { // Exact match (numParams == numArgVals) OR More args than params (numParams < numArgVals)
+			// We have enough (or more) arguments to satisfy the current procedure's parameters.
+			// log.Printf("Evaluating body of Proc(%v) with env %s\n", currProcexpr.Varnames, newenv)
+			result = l.Eval(currProcexpr.Body, newenv) // Evaluate body with the consumed args
+			// log.Printf("Body evaluation returned: %v (%T)\n", result, result)
+
+			if bp, ok := result.(*BoundProc); ok {
+				// Body returned another procedure. Continue the loop with this new proc and remaining args.
+				// log.Println("Body returned another proc, continuing loop")
+				currProcexpr = bp.ProcExpr
+				currEnv = bp.Env
+				currArgs = restArgs // Use remaining args for the *new* proc
+				// Loop continues without returning here
+			} else {
+				// Body returned a non-procedure value.
+				if len(restArgs) == 0 {
+					// No arguments left, this value is the final result.
+					// log.Println("Body returned value and no args left. Returning final result.")
+					return result
+				} else {
+					// Body returned a value, but we still have args left. This is an error.
+					panic(fmt.Sprintf("Procedure %s returned non-procedure value %v (%T), but %d arguments remain: %v", currProcexpr.Repr(), result, result, len(restArgs), restArgs))
+				}
+			}
+		}
+		// If we didn't return, the loop continues with updated currProcexpr, currEnv, currArgs
+	} // End for loop
+
+}
+
+func (l *ProcLangEval) applyProcOld(boundproc *BoundProc, args []any) any {
+	currProcexpr, currEnv := boundproc.ProcExpr, boundproc.Env
 	currArgs := args
 	var restArgs []any
 
-	for len(currArgs) > 0 && len(currProcexpr.Varnames) > 0 {
-		nargs := len(currProcexpr.Varnames)
-		arglen := len(currArgs)
-
-		currArgs, restArgs = currArgs[:nargs], currArgs[nargs:]
+	numParams := len(currProcexpr.Varnames)
+	numArgVals := len(currArgs)
+	for numArgVals > 0 && numParams > 0 {
+		maxargs := min(numArgVals, numParams)
+		currArgs, restArgs = currArgs[:maxargs], currArgs[maxargs:]
 		newargs := epl.DictZip(currProcexpr.Varnames, currArgs)
 		newenv := currEnv.Extend(newargs)
-		if nargs > arglen { // Time to curry
-			leftVarnames := currProcexpr.Varnames[arglen:]
+		if numParams > numArgVals { // Time to curry
+			leftVarnames := currProcexpr.Varnames[numArgVals:]
 			newprocexpr := Proc(leftVarnames, currProcexpr.Body)
 			return newprocexpr.Bind(newenv)
-		} else if nargs == arglen {
+		} else if numParams == numArgVals {
 			return l.Eval(currProcexpr.Body, newenv)
-		} else { // nargs < arglen
+		} else { // numParams < numArgVals
 			// Only take what we need and return rest as a call expr
 			// TODO - check types
-			currProcexpr = l.Eval(currProcexpr, newenv).(*ProcExpr)
+			log.Println("Before : ", currProcexpr, newenv.String())
+			res := l.Eval(currProcexpr, newenv)
+
+			log.Println("Result: ", res, reflect.TypeOf(res))
+			currProcexpr = res.(*BoundProc).ProcExpr
 		}
 
 		// after all case
 		currArgs = restArgs
+		numParams = len(currProcexpr.Varnames)
+		numArgVals = len(currArgs)
 	}
 
 	// Check atleast one application has happened
-	if currProcexpr == procexpr {
+	if currProcexpr == boundproc.ProcExpr {
 		panic("Called entry is *not* a function")
 	}
 	return nil
