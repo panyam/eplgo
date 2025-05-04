@@ -36,15 +36,16 @@ func (v *LetRecExpr) Printable() *epl.Printable {
 		if !yield(epl.Printablef(0, "LetRec:")) {
 			return
 		}
-		for name, proc := range v.Procs {
+		for _, name := range epl.SortedKeys(v.Procs) {
+			proc := v.Procs[name]
 			// Reuse ProcExpr's Printable, adjusting indentation maybe?
 			// Or construct manually here:
-			if !yield(epl.Printablef(2, "%s (%s) =", name, strings.Join(proc.Varnames, ", "))) {
+			if !yield(epl.Printablef(1, "%s (%s) =", name, strings.Join(proc.Varnames, ", "))) {
 				return
 			}
 			// Indent the body of the proc under its declaration
 			procBodyPrintable := proc.Body.Printable()
-			procBodyPrintable.IndentLevel += 3 // Adjust relative indent
+			procBodyPrintable.IndentLevel += 2 // Adjust relative indent
 			if !yield(procBodyPrintable) {
 				return
 			}

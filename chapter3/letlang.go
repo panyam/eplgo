@@ -192,11 +192,14 @@ func (v *LetExpr) Printable() *epl.Printable {
 		if !yield(epl.Printablef(0, "LetExpr:")) {
 			return
 		}
-		for k, v := range v.Mappings {
+		for _, k := range epl.SortedKeys(v.Mappings) {
+			val := v.Mappings[k]
 			if !yield(epl.Printablef(2, "%s = ", k)) {
 				return
 			}
-			if !yield(v.Printable()) {
+			vp := val.Printable()
+			vp.IndentLevel += 2
+			if !yield(vp) {
 				return
 			}
 		}

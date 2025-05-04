@@ -43,11 +43,23 @@ func (v *ProcExpr) Printable() *epl.Printable {
 }
 
 func (v *ProcExpr) Eq(another *ProcExpr) bool {
-	// TODO - Also check varnames
-	if v.Name != another.Name || !epl.StringListEq(v.Varnames, another.Varnames) {
+	// Compare names first - optinal
+	log.Printf("ProcExpr.Eq: Comparing (%p Name='%s', Vars=%v) and (%p Name='%s', Vars=%v)\n", v, v.Name, v.Varnames, another, another.Name, another.Varnames)
+	if v.Name != another.Name {
+		log.Printf("ProcExpr.Eq: Names differ ('%s' != '%s')\n", v.Name, another.Name)
 		return false
 	}
-	return ExprEq(v.Body, another.Body)
+	// Compare Varnames slices (order matters)
+	if !epl.StringListEq(v.Varnames, another.Varnames) { // Assumes StringListEq exists
+		log.Printf("ProcExpr.Eq: Varnames differ (%v != %v)\n", v.Varnames, another.Varnames)
+		return false
+	}
+	// Compare Body
+	bodyEq := ExprEq(v.Body, another.Body)
+	if !bodyEq {
+		log.Printf("ProcExpr.Eq: Bodies differ\n")
+	}
+	return bodyEq
 }
 
 func (v *ProcExpr) Repr() string {
