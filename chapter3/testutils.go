@@ -12,7 +12,7 @@ var ExprDict = epl.Dict[string, Expr]
 
 // Only declare the interface we want at the caller side instead of at the provider side.
 type Evaluator interface {
-	Eval(expr Expr, env *epl.Env[any]) any
+	Eval(expr Expr, env *epl.Env[any]) (any, error)
 	SetOpFunc(string, OpFunc)
 }
 
@@ -37,7 +37,11 @@ func RunTest(t *testing.T, e Evaluator, tc *TestCase, extraenv map[string]Expr) 
 	//  log.Println("Initial Env:", extraenv)
 	// }
 
-	value := e.Eval(tc.Expr, env) // Eval returns any
+	value, err := e.Eval(tc.Expr, env) // Eval returns any
+
+	// Check for unexpected errors first
+	// TODO: Modify tests later to expect errors when needed
+	assert.NoError(t, err, "Test %s Failed - Unexpected error", tc.Name)
 
 	// Assert based on the *expected* type and value
 	switch expected := tc.Expected.(type) {
@@ -67,29 +71,38 @@ func RunTest(t *testing.T, e Evaluator, tc *TestCase, extraenv map[string]Expr) 
 }
 
 func SetOpFuncs(e Evaluator) Evaluator {
-	e.SetOpFunc("-", func(env *epl.Env[any], args []Expr) any {
+	e.SetOpFunc("-", func(env *epl.Env[any], args []Expr) (any, error) {
 		if len(args) != 2 {
 			panic("'-' operator expects exactly 2 arguments")
 		}
-		v1Raw := e.Eval(args[0], env) // Returns any
-		v2Raw := e.Eval(args[1], env) // Returns any
+		v1Raw, err1 := e.Eval(args[0], env) // Returns any
+		if err1 != nil {
+			return nil, err1
+		}
+		v2Raw, err2 := e.Eval(args[1], env) // Returns any
+		if err2 != nil {
+			return nil, err2
+		}
 		// Assume ops work on literals and expect ints for '-'
 		v1Lit, ok1 := v1Raw.(*LitExpr)
 		v2Lit, ok2 := v2Raw.(*LitExpr)
 		if !ok1 || !ok2 {
-			panic(fmt.Sprintf("'-' operator requires LitExpr arguments, got %T and %T", v1Raw, v2Raw))
+			return nil, fmt.Errorf("'-' operator requires LitExpr arguments, got %T and %T", v1Raw, v2Raw)
 		}
 		v1Int, ok1 := v1Lit.Value.(int)
 		v2Int, ok2 := v2Lit.Value.(int)
 		if !ok1 || !ok2 {
-			panic(fmt.Sprintf("'-' operator requires integer values, got %T and %T", v1Lit.Value, v2Lit.Value))
+			return nil, fmt.Errorf("'-' operator requires integer values, got %T and %T", v1Lit.Value, v2Lit.Value)
 		}
-		return Lit(v1Int - v2Int) // Return LitExpr(int)
+		return Lit(v1Int - v2Int), nil // Return LitExpr(int)
 	})
-	e.SetOpFunc("+", func(env *epl.Env[any], args []Expr) any {
+	e.SetOpFunc("+", func(env *epl.Env[any], args []Expr) (any, error) {
 		out := 0
 		for _, arg := range args {
-			vRaw := e.Eval(arg, env) // Returns any
+			vRaw, err := e.Eval(arg, env) // Returns any
+			if err != nil {
+				return nil, err
+			}
 			// Assume ops work on literals and expect ints for '+'
 			vLit, ok := vRaw.(*LitExpr)
 			if !ok {
@@ -101,24 +114,27 @@ func SetOpFuncs(e Evaluator) Evaluator {
 			}
 			out += vInt
 		}
-		return Lit(out) // Return LitExpr(int)
+		return Lit(out), nil // Return LitExpr(int)
 	})
-	e.SetOpFunc("*", func(env *epl.Env[any], args []Expr) any {
+	e.SetOpFunc("*", func(env *epl.Env[any], args []Expr) (any, error) {
 		out := 1
 		for _, arg := range args {
-			vRaw := e.Eval(arg, env) // Returns any
+			vRaw, err := e.Eval(arg, env) // Returns any
+			if err != nil {
+				return nil, err
+			}
 			// Assume ops work on literals and expect ints for '*'
 			vLit, ok := vRaw.(*LitExpr)
 			if !ok {
-				panic(fmt.Sprintf("'*' operator requires LitExpr arguments, got %T", vRaw))
+				return nil, fmt.Errorf("'*' operator requires LitExpr arguments, got %T", vRaw)
 			}
 			vInt, ok := vLit.Value.(int)
 			if !ok {
-				panic(fmt.Sprintf("'*' operator requires integer values, got %T", vLit.Value))
+				return nil, fmt.Errorf("'*' operator requires integer values, got %T", vLit.Value)
 			}
 			out *= vInt
 		}
-		return Lit(out) // Return LitExpr(int)
+		return Lit(out), nil // Return LitExpr(int)
 	})
 	return e
 }

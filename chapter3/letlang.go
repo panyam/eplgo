@@ -259,7 +259,7 @@ func NewLetLangEval() *LetLangEval {
 	return out
 }
 
-func (l *LetLangEval) LocalEval(expr Expr, env *epl.Env[any]) any {
+func (l *LetLangEval) LocalEval(expr Expr, env *epl.Env[any]) (any, error) {
 	// log.Println("LetLangEval for: ", reflect.TypeOf(expr), expr.Repr())
 	switch n := expr.(type) {
 	case *LitExpr:
@@ -283,21 +283,21 @@ func (l *LetLangEval) LocalEval(expr Expr, env *epl.Env[any]) any {
 }
 
 // Evalute the value of a literal
-func (l *LetLangEval) ValueOfLit(lit *LitExpr, env *epl.Env[any]) any {
-	return lit
+func (l *LetLangEval) ValueOfLit(lit *LitExpr, env *epl.Env[any]) (any, error) {
+	return lit, nil
 }
 
 // Evaluate the value of a variable
-func (l *LetLangEval) ValueOfVar(e *VarExpr, env *epl.Env[any]) any {
+func (l *LetLangEval) ValueOfVar(e *VarExpr, env *epl.Env[any]) (any, error) {
 	// TODO - Error and type checking
 	val, found := env.Get(e.Name)
 	if !found {
-		panic(fmt.Sprintf("Variable '%s' not found in environment", e.Name))
+		return nil, fmt.Errorf("variable '%s' not found in environment", e.Name)
 	}
-	return val
+	return val, nil
 }
 
-func (l *LetLangEval) ValueOfOpExpr(e *OpExpr, env *epl.Env[any]) any {
+func (l *LetLangEval) ValueOfOpExpr(e *OpExpr, env *epl.Env[any]) (any, error) {
 	// TODO - Error and type checking
 	opfunc := l.GetOpFunc(e.Op)
 	if opfunc == nil {
@@ -307,8 +307,12 @@ func (l *LetLangEval) ValueOfOpExpr(e *OpExpr, env *epl.Env[any]) any {
 	return opfunc(env, e.Args)
 }
 
-func (l *LetLangEval) ValueOfIfExpr(e *IfExpr, env *epl.Env[any]) any {
-	condVal := l.Eval(e.Cond, env) // Returns any
+func (l *LetLangEval) ValueOfIfExpr(e *IfExpr, env *epl.Env[any]) (any, error) {
+	condVal, err := l.Eval(e.Cond, env) // Returns (any, error)
+	if err != nil {
+		return nil, err // Propagate error
+	}
+
 	condBool := false
 
 	// Define truthiness: only Lit(true) is true, others (incl. Lit(false)) are false
@@ -316,7 +320,6 @@ func (l *LetLangEval) ValueOfIfExpr(e *IfExpr, env *epl.Env[any]) any {
 		if boolVal, ok2 := litCond.Value.(bool); ok2 {
 			condBool = boolVal // Use the actual boolean value
 		}
-		// Any other literal value (int, string, false) counts as false
 	} // Any non-literal result (like a BoundProc) also counts as false
 
 	// log.Printf("If condition %s evaluated to %v (%T), bool result: %v\n", e.Cond.Repr(), condVal, condVal, condBool)
@@ -328,36 +331,46 @@ func (l *LetLangEval) ValueOfIfExpr(e *IfExpr, env *epl.Env[any]) any {
 	}
 }
 
-func (l *LetLangEval) ValueOfTupleExpr(e *TupleExpr, env *epl.Env[any]) any {
-	// TODO - Error and type checking
-	vals := l.EvalExprList(e.Children, env)
-	return vals // Tuple(vals)
+func (l *LetLangEval) ValueOfTupleExpr(e *TupleExpr, env *epl.Env[any]) (any, error) {
+	vals, err := l.EvalExprList(e.Children, env)
+	if err != nil {
+		return nil, err // Propagate error from list eval
+	}
+	// Return the slice directly
+	return vals, nil
 }
 
-func (l *LetLangEval) ValueOfIsZeroExpr(e *IsZeroExpr, env *epl.Env[any]) any {
-	val := l.Eval(e.Expr, env) // Returns any
+func (l *LetLangEval) ValueOfIsZeroExpr(e *IsZeroExpr, env *epl.Env[any]) (any, error) {
+	val, err := l.Eval(e.Expr, env) // Returns any
+	if err != nil {
+		return nil, err
+	}
 	litVal, ok := val.(*LitExpr)
 	if !ok {
-		panic(fmt.Sprintf("iszero expected a LitExpr argument, got %T (%v) for expr %s", val, val, e.Expr.Repr()))
+		return nil, fmt.Errorf("iszero expected a LitExpr argument, got %T (%v) for expr %s", val, val, e.Expr.Repr())
 	}
 	// For now, assume IsZero only works on ints
 	intVal, ok := litVal.Value.(int)
 	if !ok {
 		panic(fmt.Sprintf("iszero expected an integer value, got %T (%v)", litVal.Value, litVal.Value))
 	}
-	return Lit(intVal == 0) // Return *LitExpr(bool)
+	return Lit(intVal == 0), nil // Return *LitExpr(bool)
 }
 
 type ExprMap = map[string]Expr
 
-func (l *LetLangEval) ValueOfLetExpr(e *LetExpr, env *epl.Env[any]) any {
+func (l *LetLangEval) ValueOfLetExpr(e *LetExpr, env *epl.Env[any]) (any, error) {
 	bindings := map[string]any{}
 	for k, v := range e.Mappings {
 		// log.Printf("Evaluating let binding: %s = %s\n", k, v.Repr())
-		bindings[k] = l.Eval(v, env) // Eval returns any
+		val, err := l.Eval(v, env) // Eval returns (any, error)
+		if err != nil {
+			return nil, fmt.Errorf("evaluating binding '%s': %w", k, err) // Propagate error
+		}
+		bindings[k] = val
 		// log.Printf("Binding %s evaluated to: %v (%T)\n", k, bindings[k], bindings[k])
 	}
 	newenv := env.Extend(bindings)
 	// log.Printf("Evaluating let body %s in new env: %s\n", e.Body.Repr(), newenv)
-	return l.Eval(e.Body, newenv) // Eval returns any
+	return l.Eval(e.Body, newenv) // Propagate result/error from body
 }

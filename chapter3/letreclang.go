@@ -102,7 +102,7 @@ func NewLetRecLangEval() *LetRecLangEval {
 }
 
 // LocalEval handles expression types specific to LetRecLang or delegates to ProcLangEval.
-func (l *LetRecLangEval) LocalEval(expr Expr, env *epl.Env[any]) any {
+func (l *LetRecLangEval) LocalEval(expr Expr, env *epl.Env[any]) (any, error) {
 	// log.Printf("LetRecLangEval evaluating: %s (%T)", expr.Repr(), expr)
 	switch n := expr.(type) {
 	case *LetRecExpr:
@@ -115,7 +115,7 @@ func (l *LetRecLangEval) LocalEval(expr Expr, env *epl.Env[any]) any {
 }
 
 // ValueOfLetRec evaluates a 'letrec' expression.
-func (l *LetRecLangEval) ValueOfLetRec(e *LetRecExpr, env *epl.Env[any]) any {
+func (l *LetRecLangEval) ValueOfLetRec(e *LetRecExpr, env *epl.Env[any]) (any, error) {
 	// 1. Create a new environment nested within the current one.
 	//    This new environment will hold the mutually recursive bindings.
 	newenv := env.Push() // newenv.outer points to env
