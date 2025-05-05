@@ -106,7 +106,7 @@ func NewLazyLangEval() *LazyLangEval {
 }
 
 // LocalEval handles expression types specific to LazyLang or delegates.
-func (l *LazyLangEval) LocalEval(expr Expr, env *epl.Env[any]) any {
+func (l *LazyLangEval) LocalEval(expr Expr, env *epl.Env[any]) (any, error) {
 	// log.Printf("LazyLangEval evaluating: %s (%T)\n", expr.Repr(), expr)
 	switch n := expr.(type) {
 	case *LazyExpr: // Handle 'lazy <expr>'
@@ -120,7 +120,7 @@ func (l *LazyLangEval) LocalEval(expr Expr, env *epl.Env[any]) any {
 }
 
 // valueOfLazyExpr handles 'lazy <expr>'
-func (l *LazyLangEval) valueOfLazyExpr(e *LazyExpr, env *epl.Env[any]) any {
+func (l *LazyLangEval) valueOfLazyExpr(e *LazyExpr, env *epl.Env[any]) (any, error) {
 	// Package the expression and the *current* environment into a Thunk value.
 	// Do not evaluate e.Expr yet.
 	thunkValue := &Thunk{
@@ -128,13 +128,16 @@ func (l *LazyLangEval) valueOfLazyExpr(e *LazyExpr, env *epl.Env[any]) any {
 		Env:  env, // Capture the current environment
 	}
 	// log.Printf("lazy evaluated %s to Thunk %s\n", e.Expr.Repr(), thunkValue.Repr())
-	return thunkValue // Return the Thunk value itself
+	return thunkValue, nil // Return the Thunk value itself
 }
 
 // valueOfThunkExpr handles 'thunk <expr>' (force evaluation)
-func (l *LazyLangEval) valueOfThunkExpr(e *ThunkExpr, env *epl.Env[any]) any {
+func (l *LazyLangEval) valueOfThunkExpr(e *ThunkExpr, env *epl.Env[any]) (any, error) {
 	// 1. Evaluate the expression that should yield a Thunk.
-	value := l.Eval(e.Expr, env)
+	value, err := l.Eval(e.Expr, env)
+	if err != nil {
+		return nil, err
+	}
 
 	// 2. Check if the result is actually a Thunk.
 	thunkValue, ok := value.(*Thunk)
@@ -146,7 +149,5 @@ func (l *LazyLangEval) valueOfThunkExpr(e *ThunkExpr, env *epl.Env[any]) any {
 
 	// 3. Force the evaluation by evaluating the Thunk's expression in its captured environment.
 	//    Use l.Eval() for recursive dispatch.
-	result := l.Eval(thunkValue.Expr, thunkValue.Env)
-	// log.Printf("thunk forced result: %v (%T)\n", result, result)
-	return result
+	return l.Eval(thunkValue.Expr, thunkValue.Env)
 }

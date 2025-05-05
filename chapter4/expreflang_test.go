@@ -31,7 +31,11 @@ func RunExpRefTest(t *testing.T, e Evaluator, tc *TestCase, extraenv map[string]
 	// 	log.Println("Initial Env:", extraenv)
 	// }
 
-	value := e.Eval(tc.Expr, env) // Eval returns any
+	value, err := e.Eval(tc.Expr, env) // Eval returns any
+
+	// Check for unexpected errors first
+	// TODO: Modify tests later to expect errors when needed
+	assert.NoError(t, err, "Test %s Failed - Unexpected error", tc.Name)
 
 	// Assert based on the *expected* type and value
 	// For Chapter 4, expected might be a primitive OR could indicate structure (e.g., expect a ref)

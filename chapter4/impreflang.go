@@ -64,7 +64,7 @@ func NewImpRefLangEval() *ImpRefLangEval {
 }
 
 // LocalEval handles expression types specific to ImpRefLang or delegates.
-func (l *ImpRefLangEval) LocalEval(expr chapter3.Expr, env *epl.Env[any]) any {
+func (l *ImpRefLangEval) LocalEval(expr chapter3.Expr, env *epl.Env[any]) (any, error) {
 	// log.Printf("ImpRefLangEval evaluating: %s (%T)\n", expr.Repr(), expr)
 	switch n := expr.(type) {
 	case *AssignExpr: // Handle the new type
@@ -76,9 +76,12 @@ func (l *ImpRefLangEval) LocalEval(expr chapter3.Expr, env *epl.Env[any]) any {
 }
 
 // valueOfAssign handles 'set var = expr'
-func (l *ImpRefLangEval) valueOfAssign(e *AssignExpr, env *epl.Env[any]) any {
+func (l *ImpRefLangEval) valueOfAssign(e *AssignExpr, env *epl.Env[any]) (any, error) {
 	// Evaluate the expression for the new value
-	newValue := l.Eval(e.Expr, env)
+	newValue, err := l.Eval(e.Expr, env)
+	if err != nil {
+		return nil, err
+	}
 
 	// Get the *reference* associated with the variable name from the environment.
 	// env.Get looks up the value *inside* the ref. We need the ref itself.
@@ -95,5 +98,5 @@ func (l *ImpRefLangEval) valueOfAssign(e *AssignExpr, env *epl.Env[any]) any {
 	varRef.Value = newValue
 
 	// 'set' returns the new value
-	return newValue
+	return newValue, nil
 }

@@ -207,7 +207,7 @@ func NewExpRefLangEval() *ExpRefLangEval {
 }
 
 // LocalEval handles expression types specific to ExpRefLang or delegates.
-func (l *ExpRefLangEval) LocalEval(expr Expr, env *epl.Env[any]) any {
+func (l *ExpRefLangEval) LocalEval(expr Expr, env *epl.Env[any]) (any, error) {
 	// log.Printf("ExpRefLangEval evaluating: %s (%T)\n", expr.Repr(), expr)
 	switch n := expr.(type) {
 	case *RefExpr:
@@ -226,8 +226,10 @@ func (l *ExpRefLangEval) LocalEval(expr Expr, env *epl.Env[any]) any {
 
 // --- Implement valueOf... methods ---
 
-func (l *ExpRefLangEval) valueOfBlock(e *BlockExpr, env *epl.Env[any]) any {
+func (l *ExpRefLangEval) valueOfBlock(e *BlockExpr, env *epl.Env[any]) (any, error) {
 	var result any
+	var err error
+
 	// Default result if block is empty (or consider panic/error?)
 	// Python returned Lit(0). Let's return nil for now, maybe change to Lit(0) or Void later.
 	result = nil // Or perhaps Lit(0)? Check Python behavior/tests.
@@ -236,35 +238,41 @@ func (l *ExpRefLangEval) valueOfBlock(e *BlockExpr, env *epl.Env[any]) any {
 	result = Lit(0)
 
 	for _, expr := range e.Exprs {
-		result = l.Eval(expr, env) // Use Eval to allow dispatch back to Self
+		result, err = l.Eval(expr, env) // Use Eval to allow dispatch back to Self
 	}
-	return result // Return the value of the last expression
+	return result, err // Return the value of the last expression
 }
 
-func (l *ExpRefLangEval) valueOfRef(e *RefExpr, env *epl.Env[any]) any {
+func (l *ExpRefLangEval) valueOfRef(e *RefExpr, env *epl.Env[any]) (any, error) {
 	if e.IsVarRef {
 		// Mode: 'ref varname'
 		varname := e.ExprOrVar.(string)
 		varRef := env.GetRef(varname) // Get the *epl.Ref[any] itself
 		if varRef == nil {
-			log.Panicf("ref: variable '%s' not found in environment", varname)
+			return nil, fmt.Errorf("ref: variable '%s' not found in environment", varname)
 		}
 		// log.Printf("ref var evaluated %s to Ref %p\n", varname, varRef)
-		return varRef // Return the existing reference
+		return varRef, nil // Return the existing reference
 	} else {
 		// Mode: 'newref(expr)'
 		initialValueExpr := e.ExprOrVar.(Expr)
-		initialValue := l.Eval(initialValueExpr, env)
+		initialValue, err := l.Eval(initialValueExpr, env)
+		if err != nil {
+			return nil, err
+		}
 		// Create a *new* reference cell containing this value
 		newRef := &epl.Ref[any]{Value: initialValue}
 		// log.Printf("newref evaluated %s to %v, created Ref %p\n", initialValueExpr.Repr(), initialValue, newRef)
-		return newRef // Return the pointer to the new Ref struct
+		return newRef, err // Return the pointer to the new Ref struct,
 	}
 }
 
-func (l *ExpRefLangEval) valueOfDeRef(e *DeRefExpr, env *epl.Env[any]) any {
+func (l *ExpRefLangEval) valueOfDeRef(e *DeRefExpr, env *epl.Env[any]) (any, error) {
 	// Evaluate the expression which *should* yield a reference
-	refVal := l.Eval(e.RefExpr, env)
+	refVal, err := l.Eval(e.RefExpr, env)
+	if err != nil {
+		return nil, err
+	}
 
 	// Check if the result is actually a reference (*epl.Ref[any])
 	theRef, ok := refVal.(*epl.Ref[any])
@@ -273,19 +281,25 @@ func (l *ExpRefLangEval) valueOfDeRef(e *DeRefExpr, env *epl.Env[any]) any {
 	}
 	// log.Printf("deref evaluated %s to Ref %p, returning Value %v\n", e.RefExpr.Repr(), theRef, theRef.Value)
 	// Return the value *inside* the reference cell
-	return theRef.Value
+	return theRef.Value, nil
 }
 
-func (l *ExpRefLangEval) valueOfSetRef(e *SetRefExpr, env *epl.Env[any]) any {
+func (l *ExpRefLangEval) valueOfSetRef(e *SetRefExpr, env *epl.Env[any]) (any, error) {
 	// Evaluate the expression which *should* yield a reference
-	refVal := l.Eval(e.RefExpr, env)
+	refVal, err := l.Eval(e.RefExpr, env)
+	if err != nil {
+		return nil, err
+	}
 	theRef, ok := refVal.(*epl.Ref[any])
 	if !ok {
 		log.Panicf("setref expected a reference argument for the first expression, but got type %T for expr %s", refVal, e.RefExpr.Repr())
 	}
 
 	// Evaluate the expression for the new value
-	newValue := l.Eval(e.ValueExpr, env)
+	newValue, err := l.Eval(e.ValueExpr, env)
+	if err != nil {
+		return nil, err
+	}
 
 	// log.Printf("setref evaluated %s to Ref %p, evaluated %s to %v. Updating ref.\n", e.RefExpr.Repr(), theRef, e.ValueExpr.Repr(), newValue)
 
@@ -293,5 +307,5 @@ func (l *ExpRefLangEval) valueOfSetRef(e *SetRefExpr, env *epl.Env[any]) any {
 	theRef.Value = newValue
 
 	// setref returns the new value
-	return newValue
+	return newValue, nil
 }
