@@ -96,22 +96,22 @@ func (e *RaiseExpr) Eq(another *RaiseExpr) bool {
 	return ExprEq(e.RaiseValueExpr, another.RaiseValueExpr)
 }
 
-// Chapter5Eval evaluates expressions including try/catch and raise.
-type Chapter5Eval struct {
+// TryLangEval evaluates expressions including try/catch and raise.
+type TryLangEval struct {
 	chapter4.LazyLangEval // Embed the previous evaluator
 }
 
-// NewChapter5Eval creates a new evaluator for the Chapter 5 language.
-func NewChapter5Eval() *Chapter5Eval {
-	out := &Chapter5Eval{}
+// NewTryLangEval creates a new evaluator for the Chapter 5 language.
+func NewTryLangEval() *TryLangEval {
+	out := &TryLangEval{}
 	// CRITICAL: Set the Self pointer for the embedded BaseEval
 	out.BaseEval.Self = out
 	return out
 }
 
 // LocalEval handles expression types specific to Chapter 5 or delegates.
-func (l *Chapter5Eval) LocalEval(expr chapter3.Expr, env *epl.Env[any]) (any, error) {
-	// log.Printf("Chapter5Eval evaluating: %s (%T)\n", expr.Repr(), expr)
+func (l *TryLangEval) LocalEval(expr chapter3.Expr, env *epl.Env[any]) (any, error) {
+	// log.Printf("TryLangEval evaluating: %s (%T)\n", expr.Repr(), expr)
 	switch n := expr.(type) {
 	case *TryExpr:
 		return l.valueOfTry(n, env)
@@ -124,7 +124,7 @@ func (l *Chapter5Eval) LocalEval(expr chapter3.Expr, env *epl.Env[any]) (any, er
 }
 
 // valueOfRaise handles 'raise E'.
-func (l *Chapter5Eval) valueOfRaise(e *RaiseExpr, env *epl.Env[any]) (any, error) {
+func (l *TryLangEval) valueOfRaise(e *RaiseExpr, env *epl.Env[any]) (any, error) {
 	// 1. Evaluate the expression E whose value will be raised.
 	raisedValue, err := l.Eval(e.RaiseValueExpr, env)
 	if err != nil {
@@ -139,7 +139,7 @@ func (l *Chapter5Eval) valueOfRaise(e *RaiseExpr, env *epl.Env[any]) (any, error
 }
 
 // valueOfTry handles 'try E catch (x) H'.
-func (l *Chapter5Eval) valueOfTry(e *TryExpr, env *epl.Env[any]) (any, error) {
+func (l *TryLangEval) valueOfTry(e *TryExpr, env *epl.Env[any]) (any, error) {
 	// 1. Evaluate the 'try' body (E).
 	// log.Printf("Entering try block for: %s\n", e.TryBody.Repr())
 	tryResult, tryErr := l.Eval(e.TryBody, env)

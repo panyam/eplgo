@@ -13,9 +13,9 @@ import (
 )
 
 // Helper to create the Chapter 5 evaluator and set standard operators
-func NewTestChapter5Eval() Evaluator {
+func NewTestTryLangEval() Evaluator {
 	// Use chapter3's SetOpFuncs for convenience
-	return SetOpFuncs(NewChapter5Eval())
+	return SetOpFuncs(NewTryLangEval())
 }
 
 // Test runner for Chapter 5 - handles errors, including RaisedError
@@ -107,7 +107,7 @@ func RunTryLangTest(t *testing.T, e Evaluator, tc *TestCase, extraenv map[string
 // --- Test Cases ---
 
 func TestTryNormalExecution(t *testing.T) {
-	evaluator := NewTestChapter5Eval()
+	evaluator := NewTestTryLangEval()
 	// try 10 catch (x) x + 1  ==> 10
 	expr := Try(10, "x", Op("+", Var("x"), 1))
 	tc := TestCase{Name: "try_normal", Expected: 10, Expr: expr}
@@ -115,7 +115,7 @@ func TestTryNormalExecution(t *testing.T) {
 }
 
 func TestTryCatchRaise(t *testing.T) {
-	evaluator := NewTestChapter5Eval()
+	evaluator := NewTestTryLangEval()
 	// try raise 10 catch (x) x + 1 ==> 11
 	expr := Try(Raise(10), "x", Op("+", Var("x"), 1))
 	tc := TestCase{Name: "try_catch", Expected: 11, Expr: expr}
@@ -128,7 +128,7 @@ func TestTryCatchRaise(t *testing.T) {
 }
 
 func TestTryNestedRaise(t *testing.T) {
-	evaluator := NewTestChapter5Eval()
+	evaluator := NewTestTryLangEval()
 	// try try raise 5 catch (x) x + 1 catch (y) y * 10
 	// Inner try: raise 5 -> caught by inner catch -> x=5 -> handler returns 6
 	// Outer try: Receives 6 normally from inner try.
@@ -163,7 +163,7 @@ func TestTryNestedRaise(t *testing.T) {
 }
 
 func TestUncaughtRaise(t *testing.T) {
-	evaluator := NewTestChapter5Eval()
+	evaluator := NewTestTryLangEval()
 	// raise 100
 	expr := Raise(100)
 	// Expect a RaisedError containing Lit(100)
@@ -185,7 +185,7 @@ func TestUncaughtRaise(t *testing.T) {
 }
 
 func TestTryNonRaisedError(t *testing.T) {
-	evaluator := NewTestChapter5Eval()
+	evaluator := NewTestTryLangEval()
 	// try y + 1 catch (x) x // y is unbound
 	expr := Try(Op("+", Var("y"), 1), "x", Var("x"))
 	// We expect the "variable not found" error, NOT a RaisedError
